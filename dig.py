@@ -10,7 +10,7 @@ from captum._utils.typing import (BaselineType, Literal, TargetType, TensorOrTup
 from captum.attr._utils.approximation_methods import approximation_parameters
 from captum.attr._utils.attribution import GradientAttribution
 from captum.attr._utils.batching import _batch_attribution
-from captum.attr._utils.common import _format_input_baseline, _reshape_and_sum, _validate_input, _format_input
+from captum.attr._utils.common import _reshape_and_sum, _validate_input
 
 
 class DiscretetizedIntegratedGradients(GradientAttribution):
@@ -31,11 +31,17 @@ class DiscretetizedIntegratedGradients(GradientAttribution):
 		TensorOrTupleOfTensorsGeneric, Tuple[TensorOrTupleOfTensorsGeneric, Tensor]
 	]:
 		is_inputs_tuple		= _is_tuple(scaled_features)
-		scaled_features_tpl	= _format_input(scaled_features)
+		# Convert to tuple format manually since _format_input is deprecated
+		if is_inputs_tuple:
+			scaled_features_tpl = scaled_features
+		else:
+			scaled_features_tpl = (scaled_features,)
 		attributions		= self.calculate_dig_attributions(scaled_features_tpl=scaled_features_tpl, target=target, additional_forward_args=additional_forward_args, n_steps=n_steps)
 		if return_convergence_delta:
 			assert len(scaled_features_tpl) == 1, 'More than one tuple not supported in this code!'
-			start_point, end_point = _format_input(scaled_features_tpl[0][0].unsqueeze(0)), _format_input(scaled_features_tpl[0][-1].unsqueeze(0))	# baselines, inputs (only works for one input, i.e. len(tuple) == 1)
+			# Format inputs manually since _format_input is deprecated
+			start_point = (scaled_features_tpl[0][0].unsqueeze(0),)
+			end_point = (scaled_features_tpl[0][-1].unsqueeze(0),)	# baselines, inputs (only works for one input, i.e. len(tuple) == 1)
 			# computes approximation error based on the completeness axiom
 			delta = self.compute_convergence_delta(
 				attributions,
