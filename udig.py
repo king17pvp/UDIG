@@ -6,7 +6,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from tqdm import tqdm
 from dig import DiscretetizedIntegratedGradients
 from attributions import run_dig_explanation
-from metrics import eval_log_odds, eval_comprehensiveness, eval_sufficiency
+from xai_metrics import calculate_log_odds, calculate_comprehensiveness, calculate_sufficiency
 from captum.attr._utils.common import _reshape_and_sum, _validate_input
 from sklearn.neighbors import kneighbors_graph
 
@@ -117,13 +117,65 @@ def calculate_attributions(model, tokenizer, inputs, device, attr_func, base_tok
     scaled_features, input_ids, ref_input_ids, input_embed, ref_input_embed, position_embed, ref_position_embed, type_embed, ref_type_embed, attention_mask = inp
     # Pass target as scalar - Captum will handle the expansion internally
     attr, deltaa = run_dig_explanation(attr_func, scaled_features, position_embed, type_embed, attention_mask, 63, target=target)
-
     # compute metrics
-    forward_func = create_forward_func(model)
-    log_odd, pred	= eval_log_odds(forward_func, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
-    comp			= eval_comprehensiveness(forward_func, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
-    suff			= eval_sufficiency(forward_func, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
+    log_odd, pred	= calculate_log_odds(model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
+    comp			= calculate_comprehensiveness(model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
+    suff			= calculate_sufficiency(model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
 
     #return log_odd
     return log_odd, comp, suff, attr, deltaa
-    
+
+# def udig_bert( 
+#     text,  
+#     model_name: str = "distilbert-base-uncased-finetuned-sst-2-english",
+#     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"), 
+#     strategy='maxcount',
+#     steps=30,
+#     nbrs=50,
+#     factor=1,
+#     show_special_tokens = False
+# ):
+#     model = AutoModelForSequenceClassification.from_pretrained(model_name)
+#     tokenizer = AutoTokenizer.from_pretrained(model_name)
+#     model.to(device)
+#     model.eval()
+#     model.zero_grad()
+#     word_features        = get_word_embeddings(model).cpu().detach().numpy()
+#     word_idx_map        = tokenizer.vocab
+#     A                    = kneighbors_graph(word_features, 500, mode='distance', n_jobs=-1)
+#     auxiliary_data = [word_idx_map, word_features, A]
+#     attr_func = DiscretetizedIntegratedGradients(create_forward_func(model))
+#     base_token_emb = get_base_token_emb(model, tokenizer, device)
+#     inp = get_inputs(model, tokenizer, text, device)
+#     input_ids, ref_input_ids, input_embed, ref_input_embed, position_embed, ref_position_embed, type_embed, ref_type_embed, attention_mask = inp
+#     scaled_features         = monotonic_paths.scale_inputs(input_ids.squeeze().tolist(), ref_input_ids.squeeze().tolist(),\
+#                                         device, auxiliary_data, method ="UIG", steps=steps, nbrs = nbrs, factor=factor, strategy=strategy)
+#     inputs                    = [scaled_features, input_ids, ref_input_ids, input_embed, ref_input_embed, position_embed, ref_position_embed, type_embed, ref_type_embed, attention_mask]
+#     with torch.no_grad():
+#         final_logits = model(inputs_embeds=input_embed, attention_mask=attention_mask).logits[0]
+#     pred_id = int(final_logits.argmax(dim=-1).item())
+#     target_label = pred_id  
+#     log_odd, comp, suff, attrib, delta= calculate_attributions(model, tokenizer, inputs, device, attr_func, base_token_emb, nn_forward_func, get_tokens, target=target_label)
+#     tokens = get_tokens(tokenizer, input_ids)
+#     if not show_special_tokens:
+#         # Typical HuggingFace BERT tokenization has specials at positions 0 and last
+#         # We detect them via tokenizer’s special tokens set.
+#         special_ids = set(tokenizer.all_special_ids)
+#         keep_idx = [i for i, tid in enumerate(input_ids[0].tolist()) if tid not in special_ids]
+#         tokens = [tokens[i] for i in keep_idx]
+#         attrib = attrib[keep_idx]
+#     return {
+#         "tokens": tokens,
+#         "attributions": attrib.detach().cpu(),
+#         "delta": delta,
+#         "log_odd": log_odd,
+#         "comp": comp,
+#         "suff": suff
+#     }
+
+# # text = "I absolutely love this movie, it was hilarious"
+# text = "This is a really bad movie, although it has a promising start, it ended on a very low note"
+# res_udig = udig_bert(model_name = "distilbert-base-uncased-finetuned-sst-2-english", text = text)
+# print(f"Attributions: {res_udig['attributions']}")
+# for tok, val in zip(res_udig["tokens"], res_udig["attributions"]): 
+#     print(f"{tok:>12s} : {val:+.6f}")
