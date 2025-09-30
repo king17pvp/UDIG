@@ -1,17 +1,6 @@
 import numpy as np, pickle
 import torch
-
-def predict(model, inputs_embeds, attention_mask=None):
-    return model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)[0]
-
-def nn_forward_func(model, input_embed, attention_mask=None, position_embed=None, type_embed=None, return_all_logits=True):
-    embeds	= input_embed + position_embed
-    embeds	= model.distilbert.embeddings.dropout(model.distilbert.embeddings.LayerNorm(embeds))
-    pred	= predict(model, embeds, attention_mask=attention_mask)
-    if return_all_logits:
-        return pred
-    else:
-        return pred.max(1).values
+from .udig import predict, nn_forward_func
 
 def calculate_log_odds(model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20):
 	logits_original						= nn_forward_func(model, input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()

@@ -1,5 +1,4 @@
 import numpy as np, math, pickle, sys
-sys.path.append('../')
 from collections import defaultdict as ddict
 from tqdm import tqdm
 from copy import deepcopy
