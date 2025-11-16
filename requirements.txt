@@ -1,2 +1,2 @@
-transformers==4.26.1
+transformers==4.56.2
 captum==0.8.0
