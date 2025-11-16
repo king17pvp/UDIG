@@ -1,33 +1,21 @@
 import numpy as np, pickle
 import torch
 
-def predict(model, inputs_embeds, attention_mask=None):
-    return model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)[0]
-
-def nn_forward_func(model, input_embed, attention_mask=None, position_embed=None, type_embed=None, return_all_logits=True):
-    embeds	= input_embed + position_embed
-    embeds	= model.distilbert.embeddings.dropout(model.distilbert.embeddings.LayerNorm(embeds))
-    pred	= predict(model, embeds, attention_mask=attention_mask)
-    if return_all_logits:
-        return pred
-    else:
-        return pred.max(1).values
-
-def calculate_log_odds(model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20):
-	logits_original						= nn_forward_func(model, input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
+def calculate_log_odds(foward_func, model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20):
+	logits_original						= foward_func(model, input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
 	predicted_label						= torch.argmax(logits_original).item()
 	prob_original						= torch.softmax(logits_original, dim=0)
 	topk_indices						= torch.topk(attr, int(attr.shape[0] * topk / 100), sorted=False).indices
 	local_input_embed					= input_embed.detach().clone()
 	local_input_embed[0][topk_indices]	= base_token_emb
-	logits_perturbed					= nn_forward_func(model, local_input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
+	logits_perturbed					= foward_func(model, local_input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
 	prob_perturbed						= torch.softmax(logits_perturbed, dim=0)
 
 	return (torch.log(prob_perturbed[predicted_label]) - torch.log(prob_original[predicted_label])).item(), predicted_label
 
 
-def calculate_sufficiency(model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20):
-	logits_original							= nn_forward_func(model, input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
+def calculate_sufficiency(foward_func, model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20):
+	logits_original							= foward_func(model, input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
 	predicted_label							= torch.argmax(logits_original).item()
 	prob_original							= torch.softmax(logits_original, dim=0)
 	topk_indices							= torch.topk(attr, int(attr.shape[0] * topk / 100), sorted=False).indices
@@ -41,14 +29,14 @@ def calculate_sufficiency(model, input_embed, position_embed, type_embed, attent
 	masked_attention_mask					= None if attention_mask is None else attention_mask[0][mask].unsqueeze(0)
 	masked_position_embed					= None if position_embed is None else position_embed[0][:mask.sum().item()].unsqueeze(0)
 	masked_type_embed						= None if type_embed is None else type_embed[0][mask].unsqueeze(0)
-	logits_perturbed						= nn_forward_func(model, masked_input_embed, attention_mask=masked_attention_mask, position_embed=masked_position_embed, type_embed=masked_type_embed, return_all_logits=True).squeeze()
+	logits_perturbed						= foward_func(model, masked_input_embed, attention_mask=masked_attention_mask, position_embed=masked_position_embed, type_embed=masked_type_embed, return_all_logits=True).squeeze()
 	prob_perturbed							= torch.softmax(logits_perturbed, dim=0)
 
 	return (prob_original[predicted_label] - prob_perturbed[predicted_label]).item()
 
 
-def calculate_comprehensiveness(model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20):
-	logits_original					= nn_forward_func(model, input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
+def calculate_comprehensiveness(foward_func, model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20):
+	logits_original					= foward_func(model, input_embed, attention_mask=attention_mask, position_embed=position_embed, type_embed=type_embed, return_all_logits=True).squeeze()
 	predicted_label					= torch.argmax(logits_original).item()
 	prob_original					= torch.softmax(logits_original, dim=0)
 	topk_indices					= torch.topk(attr, int(attr.shape[0] * topk / 100), sorted=False).indices
@@ -58,7 +46,7 @@ def calculate_comprehensiveness(model, input_embed, position_embed, type_embed, 
 	masked_attention_mask			= None if attention_mask is None else attention_mask[0][mask].unsqueeze(0)
 	masked_position_embed			= None if position_embed is None else position_embed[0][:mask.sum().item()].unsqueeze(0)
 	masked_type_embed				= None if type_embed is None else type_embed[0][mask].unsqueeze(0)
-	logits_perturbed				= nn_forward_func(model, masked_input_embed, attention_mask=masked_attention_mask, position_embed=masked_position_embed, type_embed=masked_type_embed, return_all_logits=True).squeeze()
+	logits_perturbed				= foward_func(model, masked_input_embed, attention_mask=masked_attention_mask, position_embed=masked_position_embed, type_embed=masked_type_embed, return_all_logits=True).squeeze()
 	prob_perturbed					= torch.softmax(logits_perturbed, dim=0)
 
 	return (prob_original[predicted_label] - prob_perturbed[predicted_label]).item()
