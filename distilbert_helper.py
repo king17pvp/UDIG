@@ -30,9 +30,9 @@ def load_mappings(dataset, knn_nbrs=500):
     return word_idx_map, word_features, adj
 
 def construct_input_ref_pair(tokenizer, text, ref_token_id, sep_token_id, cls_token_id, device):
-	text_ids		= tokenizer(text, truncation=True, return_special_tokens_mask=True)
-	input_ids		= text_ids['input_ids']	# construct input token ids
-	ref_input_ids	= [cls_token_id] + [ref_token_id] * (len(text_ids['input_ids']) - 2) + [sep_token_id]	# construct reference token ids
+	text_ids		= tokenizer.encode(text, add_special_tokens=False, truncation=True,max_length=tokenizer.max_len_single_sentence)
+	input_ids		= [cls_token_id] + text_ids + [sep_token_id]	# construct input token ids
+	ref_input_ids	= [cls_token_id] + [ref_token_id] * len(text_ids) + [sep_token_id] # construct reference token ids
 
 	return torch.tensor([input_ids], device=device), torch.tensor([ref_input_ids], device=device)
 
@@ -100,7 +100,7 @@ def get_inputs(model, tokenizer, text, device):
 
 # Create a wrapper function that captures the model
 def create_forward_func(model):
-    def forward_func(input_embed, attention_mask=None, position_embed=None, type_embed=None, return_all_logits=True):
+    def forward_func(input_embed, attention_mask=None, position_embed=None, type_embed=None, return_all_logits=False):
         return nn_forward_func(model, input_embed, attention_mask, position_embed, type_embed, return_all_logits)
     return forward_func
 
@@ -116,7 +116,7 @@ def calculate_attributions(forward_func, model, tokenizer, inputs, device, attr_
     # compute attribution
     scaled_features, input_ids, ref_input_ids, input_embed, ref_input_embed, position_embed, ref_position_embed, type_embed, ref_type_embed, attention_mask = inp
     # Pass target as scalar - Captum will handle the expansion internally
-    attr, deltaa = run_dig_explanation(attr_func, scaled_features, position_embed, type_embed, attention_mask, 63, target=target)
+    attr, deltaa = run_dig_explanation(attr_func, scaled_features, position_embed, type_embed, attention_mask, 63)
     # compute metrics
     log_odd, pred	= calculate_log_odds(forward_func, model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
     comp			= calculate_comprehensiveness(forward_func, model, input_embed, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
