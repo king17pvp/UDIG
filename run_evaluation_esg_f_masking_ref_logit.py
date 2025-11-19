@@ -87,7 +87,6 @@ def esg_f_masking_ref_logit_bert_db(
         
         # print(f"Final logits: {final_logits}")
     pred_id = int(final_logits.argmax(dim=-1).item())
-    # print(f"Predicted label id: {pred_id}")
     L, d = X.shape[1], X.shape[2]
     start_time = time.perf_counter()
     
@@ -161,18 +160,6 @@ def esg_f_masking_ref_logit_bert_db(
         return logit_score
     start_time = time.perf_counter()
     for m in range(1):
-
-        #masking_w = torch.bernoulli(p_sample).to(device)
-        #masking_w = masking_w.view(L,1)
-        #masking_w[m%L] = 0
-        #masking_w = torch.full((L,1), 1).to(device)
-        #masking_w[-2] = 0
-        #masking_w[-3] = 0
-        #masking_w[-7] = 0
-        #masking_w[-4] = 0
-        #masking_w[-5] = 0
-        #masking_w[masking_w==0] = -1
-        #print(masking_w.view(1,L))
         sum_dlg = 0
         for i in range(len(t_vals)):
             # ε(t) = t * 1_L  -> (L,)
@@ -246,9 +233,6 @@ def esg_f_masking_ref_logit_bert_db(
     end_time = time.perf_counter()
     tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
     base_token_emb = get_base_token_emb(model, tokenizer, device)
-    # position_ids = torch.arange(L, dtype=torch.long, device=device)
-    # position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-    # position_emb = construct_position_embedding(model, position_ids)
     inp = get_inputs(model, tokenizer, text, device)
     input_ids, ref_input_ids, input_embed, ref_input_embed, position_embed, ref_position_embed, type_embed, ref_type_embed, attention_mask = inp
     log_odd, pred = calculate_log_odds(nn_forward_func, model, X, position_embed, type_embed, attention_mask, base_token_emb, attr, topk=20)
@@ -276,6 +260,7 @@ def esg_f_masking_ref_logit_bert_db(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='distilbert', help='Model name or path')
+    parser.add_argument('--dataset', choices=['sst2', 'imdb', 'rotten'])
     parser.add_argument('--range', type=float, nargs=2, default=[-1.0, 1.0], help='Range [a,b] for epsilon')
     parser.add_argument('--steps', type=int, default=101, help='Number of steps for Riemann sum')
 
@@ -283,15 +268,31 @@ if __name__ == "__main__":
     a, b = args.range
     steps = args.steps
     model = args.model
+    dataset_name = args.dataset
     if model == 'distilbert':
         from distilbert_helper import *
-        model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+        if dataset_name == 'sst2':
+            model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+        if dataset_name == 'imdb':
+            model_name = "textattack/distilbert-base-uncased-imdb"
+        elif dataset_name == 'rotten':
+            model_name = "textattack/distilbert-base-uncased-rotten-tomatoes"
     elif model == 'bert':
         from bert_helper import *
-        model_name = "textattack/bert-base-uncased-SST-2"
+        if dataset_name == 'sst2':
+            model_name = "textattack/bert-base-uncased-SST-2"
+        elif dataset_name == 'imdb':
+            model_name = "textattack/bert-base-uncased-imdb"
+        elif dataset_name == 'rotten':
+            model_name = "textattack/bert-base-uncased-rotten-tomatoes"
     elif model == 'roberta':
         from roberta_helper import *
-        model_name = "textattack/roberta-base-SST-2"
+        if dataset_name == 'sst2':
+            model_name = "textattack/roberta-base-SST-2"
+        elif dataset_name == 'imdb':
+            model_name = "textattack/roberta-base-imdb"
+        elif dataset_name == 'rotten':
+            model_name = "textattack/roberta-base-rotten-tomatoes"
     else:
         raise NotImplementedError(f"Model {model} not implemented")
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -304,8 +305,16 @@ if __name__ == "__main__":
     print(f"Log odd: {res_egrad['log_odd']}, Comprehensiveness: {res_egrad['comp']}, Sufficiency: {res_egrad['suff']}")
     for tok, val in zip(res_egrad["tokens"], res_egrad["attributions"]):
         print(f"{tok:>12s} : {val.detach().cpu().numpy():+.6f}")
-    dataset= load_dataset('glue', 'sst2')['test']
-    data= list(zip(dataset['sentence'], dataset['label'], dataset['idx']))
+    if args.dataset == 'imdb':
+        dataset	= load_dataset('imdb')['test']
+        data	= list(zip(dataset['text'], dataset['label']))
+        data	= random.sample(data, 2000)
+    elif args.dataset == 'sst2':
+        dataset	= load_dataset('glue', 'sst2')['test']
+        data	= list(zip(dataset['sentence'], dataset['label'], dataset['idx']))
+    elif args.dataset == 'rotten':
+        dataset	= load_dataset('rotten_tomatoes')['test']
+        data	= list(zip(dataset['text'], dataset['label']))
     # dataset	= load_dataset('imdb')['test']
     # data = list(zip(dataset['text'], dataset['label']))
     count = 0
@@ -317,20 +326,6 @@ if __name__ == "__main__":
     for row in tqdm(data):
         text = row[0]
         res_egrad = esg_f_masking_ref_logit_bert_db(text = text, a = a, b = b, steps = steps, model_name = model_name, show_special_tokens = False)
-        # res_intergrated_grad = integrated_gradient(text = text, steps = steps, show_special_tokens = False)
-        # res_shapley = shapley_bert(text = text, show_special_tokens = False)
-        # res_lime = lime_bert(text = text, use_pad_baseline=True, show_special_tokens = False)
-        # res_udig = udig_bert(text = text, show_special_tokens = False)
-        # print(f"Result for UDIG, took {res_udig['time']} seconds:")
-        # print(f"Log odd: {res_udig['log_odd']}, Comprehensiveness: {res_udig['comp']}, Sufficiency: {res_udig['suff']}")
-        # print(f"Result for IG, took {res_intergrated_grad['time']} seconds: ")
-        # print(f"Log odd: {res_intergrated_grad['log_odd']}, Comprehensiveness: {res_intergrated_grad['comp']}, Sufficiency: {res_intergrated_grad['suff']}")
-        # print(f"Result for Shapley, took {res_shapley['time']} seconds: ")
-        # print(f"Log odd: {res_shapley['log_odd']}, Comprehensiveness: {res_shapley['comp']}, Sufficiency: {res_shapley['suff']}")
-        # print(f"Result for LIME, took {res_lime['time']} seconds: ")
-        # print(f"Log odd: {res_lime['log_odd']}, Comprehensiveness: {res_lime['comp']}, Sufficiency: {res_lime['suff']}")
-        # print(f"Result for Epsilon Gradient, took {res_egrad['time']} seconds:")
-        # print(f"Log odd: {res_egrad['log_odd']}, Comprehensiveness: {res_egrad['comp']}, Sufficiency: {res_egrad['suff']}")
         log_odds += res_egrad['log_odd']
         comps += res_egrad['comp']
         suffs += res_egrad['suff']

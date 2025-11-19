@@ -92,22 +92,45 @@ def udig_bert(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='distilbert', help='Model name or path')
+    parser.add_argument('--dataset', choices=['sst2', 'imdb', 'rotten'])
 
     args = parser.parse_args()
     model = args.model
+    dataset_name = args.dataset
     if model == 'distilbert':
         from distilbert_helper import *
-        model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+        if dataset_name == 'sst2':
+            model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+        if dataset_name == 'imdb':
+            model_name = "textattack/distilbert-base-uncased-imdb"
+        elif dataset_name == 'rotten':
+            model_name = "textattack/distilbert-base-uncased-rotten-tomatoes"
     elif model == 'bert':
         from bert_helper import *
-        model_name = "textattack/bert-base-uncased-SST-2"
+        if dataset_name == 'sst2':
+            model_name = "textattack/bert-base-uncased-SST-2"
+        elif dataset_name == 'imdb':
+            model_name = "textattack/bert-base-uncased-imdb"
+        elif dataset_name == 'rotten':
+            model_name = "textattack/bert-base-uncased-rotten-tomatoes"
     elif model == 'roberta':
         from roberta_helper import *
-        model_name = "textattack/roberta-base-SST-2"
-    else:
-        raise NotImplementedError(f"Model {model} not implemented")
-    dataset= load_dataset('glue', 'sst2')['test']
-    data= list(zip(dataset['sentence'], dataset['label'], dataset['idx']))
+        if dataset_name == 'sst2':
+            model_name = "textattack/roberta-base-SST-2"
+        elif dataset_name == 'imdb':
+            model_name = "textattack/roberta-base-imdb"
+        elif dataset_name == 'rotten':
+            model_name = "textattack/roberta-base-rotten-tomatoes"
+    if args.dataset == 'imdb':
+        dataset	= load_dataset('imdb')['test']
+        data	= list(zip(dataset['text'], dataset['label']))
+        data	= random.sample(data, 2000)
+    elif args.dataset == 'sst2':
+        dataset	= load_dataset('glue', 'sst2')['test']
+        data	= list(zip(dataset['sentence'], dataset['label'], dataset['idx']))
+    elif args.dataset == 'rotten':
+        dataset	= load_dataset('rotten_tomatoes')['test']
+        data	= list(zip(dataset['text'], dataset['label']))
     # dataset	= load_dataset('imdb')['test']
     # data = list(zip(dataset['text'], dataset['label']))
     steps = 500
